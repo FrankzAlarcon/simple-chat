@@ -51,3 +51,14 @@ export interface ChatData {
   userFrom: User,
   userTo: User
 }
+export type GroupMessage = {
+  id: string;
+  text: string;
+  userIdFrom: string;
+  groupIdTo: string;
+}
+
+export interface GroupChatResponse {
+  messages: GroupMessage[],
+  name: string
+}

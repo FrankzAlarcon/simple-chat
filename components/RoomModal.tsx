@@ -41,6 +41,7 @@ export default function RoomModal({closeModal, isOpen, usersConnected, selectedU
       }, 2500)
     }
     handleSaveGroup({id: groupName, name: groupName, users: selectedUsers});
+    handleClose();
   }
 
   const handleClose = () => {

@@ -7,8 +7,6 @@ import RoomModal from '../components/RoomModal';
 import User from '../components/User';
 import { ChatUser, GroupInfo, Room } from '../types';
 
-let wasExecuted = false;
-
 export const socket = io('http://localhost:3001');
 
 const Home: NextPage = () => {
@@ -18,22 +16,23 @@ const Home: NextPage = () => {
   const [showForm, setShowForm] = useState(true);
   const [openModal, setOpenModal] = useState(false);
   const [input, setInput] = useState('');
-
+  const [groupId, setGroupId] = useState('');
+  
   useEffect(() => {
     try {
       const name = localStorage.getItem('user');      
-      if(!name || wasExecuted) {
+      if(!name) {
         return;      
       }
       const userConnected: ChatUser = JSON.parse(name);
       socket.emit('new user', userConnected.username);
+      socket.emit('leave group', groupId);
       socket.on('current user', (userBk: ChatUser, usersConnected: ChatUser[]) => {
         setUser(userBk);
         setUsersConnected(usersConnected);
         setShowForm(false);
       }) 
       setShowForm(false);
-      wasExecuted = true;
     } catch (error) {
       localStorage.removeItem('user');
     }
@@ -46,9 +45,9 @@ const Home: NextPage = () => {
       return;
     }
     socket.emit('new user', input);
-    socket.on('current user', (user: ChatUser, usersConnected: ChatUser[]) => {
-      setUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
+    socket.on('current user', (userx: ChatUser, usersConnected: ChatUser[]) => {
+      setUser(userx);
+      localStorage.setItem('user', JSON.stringify(userx));
       setUsersConnected(usersConnected);
       setShowForm(false);
     })        
@@ -65,10 +64,16 @@ const Home: NextPage = () => {
       setUsersConnected(filteredUsers);
     });
 
+    socket.on('group created', (group: GroupInfo) => {      
+      const userConnected = JSON.parse((localStorage.getItem('user') as string));
+      userConnected.groups.push(group);
+      setUser(userConnected);
+    })
+
     socket.on('added to group', (group: GroupInfo) => {
-      if(user) {
-        setUser({...user, groups: [...user.groups, group]});
-      }
+      const userConnected = JSON.parse((localStorage.getItem('user') as string));
+      userConnected.groups.push(group);
+      setUser(userConnected);
     })
 
     socket.on('remove user', (users: ChatUser[]) => {
@@ -94,14 +99,21 @@ const Home: NextPage = () => {
     setOpenModal(true)
   }
 
+  const handleCloseSession = () => {
+    localStorage.removeItem('user');
+    setShowForm(true);
+    setUsersConnected([]);
+    setUser({id: '', username: '', groups: []});
+    socket.emit('close session');
+  }
 
   return (
     <Layout titleName='Home'>
-      <main className='md:flex md:justify-around md:gap-5 p-2 space-y-4 md:space-y-0 min-h-[80vh]'>
+      <main className='md:flex md:flex-wrap md:justify-around md:gap-5 p-2 space-y-4 md:space-y-0 min-h-[80vh]'>
         {
           !showForm ? (
             <>
-              <section className='w-full lg:w-5/12'>
+              <section className='w-full md:w-5/12 lg:w-5/12'>
                 <div className='my-2'>
                   <h2 className='text-center font-black text-xl uppercase text-orange-500'>Usuarios conectados</h2>
                   <p className='text-center text-xs font-black uppercase'>Inicia una conversación</p>
@@ -114,7 +126,7 @@ const Home: NextPage = () => {
                   }
                 </div>
               </section>
-              <section className='w-full lg:w-5/12'>
+              <section className='w-full md:w-5/12 lg:w-5/12'>
               <div className='my-2'>
                   <h2 className='text-center font-black text-xl uppercase text-orange-500'>Tus Grupos</h2>
                   <p className='text-center text-xs font-black uppercase'>Ingresa a un grupo</p>
@@ -124,7 +136,7 @@ const Home: NextPage = () => {
                   {
                     (user.groups && user.groups.length) > 0 ? (
                       user.groups.map((group) => (
-                        <Group key={group.id} name={group.name}/>
+                        <Group key={group.id} group={group} user={user} setGroupId={setGroupId} />
                       ))
                     ) : (
                       <p
@@ -138,6 +150,12 @@ const Home: NextPage = () => {
                   onClick={handleOpenModal}
                 >Crear Grupo</button>
               </section>
+
+                <button
+                  className='bg-green-400 md:w-3/12 p-2 md:h-10 uppercase font-bold text-sm w-full text-white hover:bg-green-500 transition-colors duration-500 md:flex-none'
+                  onClick={handleCloseSession}
+                >Salir</button>                
+              
             </>
           ) : (
             <section>

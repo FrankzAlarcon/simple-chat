@@ -1,22 +1,24 @@
 import { GetServerSidePropsContext, NextPage } from 'next'
+import { useRouter } from 'next/router';
 import React, { useEffect, useRef, useState } from 'react'
-import { Layout } from '../../components/Layout';
-import { ChatData, ChatUser, Message, MessageToUser, User } from '../../types';
-import { socket } from '../index';
+import { Layout } from '../../../components/Layout';
+import { ChatUser, GroupChatResponse, GroupMessage, MessageToGroup } from '../../../types';
+import { socket } from '../../index';
 
 interface Props {
   props: {
-    chats: Message[],
-    userFrom: User,
-    userTo: User,
+    chats: GroupMessage[],
   },
-  message: MessageToUser
+  message: GroupMessage
 }
 
 
-const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
+const Room: NextPage<Props['props']> = ({chats}) => {
+  const [user, setUser] = useState<ChatUser>({id: '', username: '', groups: []});
   const [messages, setMessages] = useState(chats);
   const [text, setText] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const router = useRouter();
 
 
   const chatBox = useRef<HTMLDivElement>(null);
@@ -28,12 +30,16 @@ const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
   }
 
   useEffect(() => {
+    const groupId = router.asPath.split('-simplechat-')[1];
+    setGroupId(groupId);
     const name = localStorage.getItem('user');      
     if(!name) {
       return;      
     }
     const userConnected: ChatUser = JSON.parse(name);
     socket.emit('new user', userConnected.username);
+    socket.emit('enter to group', groupId);
+    setUser(userConnected);
   }, [])
   useEffect(() => {
     scrollToBottom();
@@ -43,8 +49,8 @@ const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
     if(!text) {
       return;
     }
-    const messageData = {userFromId: userFrom.id, userToId: userTo.id, text}
-    socket.emit('new message', messageData);
+    const messageData: MessageToGroup = {userIdFrom: user.id, groupIdTo: groupId, text}
+    socket.emit('group message', messageData);
     setText('');
   }
 
@@ -61,12 +67,14 @@ const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
   }
   
   useEffect(() => {
-    socket.on('send message', (messageInfo: Props['message']) => {
+    socket.on('send group message', (messageInfo: Props['message']) => {
+      console.log(messageInfo)
       setMessages([...messages, messageInfo]);
-    })
-    socket.on('sended message', (messageInfo: Props['message']) => {
+    });
+    socket.on('sended group message', (messageInfo: Props['message']) => {
+      console.log(messageInfo)
       setMessages([...messages, messageInfo]);
-    })
+    });
   }, [messages]);
 
   return (
@@ -80,8 +88,8 @@ const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
                   {
                     messages?.map((item) => {
                       return (
-                        <div key={item.id} className={`flex ${item.userToId !== userTo.id ? '': 'justify-end'}`}>
-                          <p className={`${item.userToId !== userTo.id ? 'bg-slate-400' : 'bg-lime-400'} inline-block px-4 rounded-full my-1`}>{item.text}</p>
+                        <div key={item.id} className={`flex ${item.userIdFrom !== user.id ? '': 'justify-end'}`}>
+                          <p className={`${item.userIdFrom !== user.id ? 'bg-slate-400' : 'bg-lime-400'} inline-block px-4 rounded-full my-1`}>{item.text}</p>
                         </div>
                       )
                     })
@@ -113,16 +121,14 @@ const Personal: NextPage<Props['props']> = ({chats, userFrom, userTo}) => {
 }
 
 export async function getServerSideProps({params}: GetServerSidePropsContext) {
-  if(params?.id) {
+  if(params?.roomId) {
     try {
-      const [from, to] = (params.id as string).split('-simplechat-');
-      const rawData = await fetch(`http://localhost:3001/api/user-chat/from/${from}/to/${to}`);    
-      const {data}: {data: ChatData} = await rawData.json();
+      const [userId, groupId] = (params.roomId as string).split('-simplechat-');
+      const rawData = await fetch(`http://localhost:3001/api/group-chat/user/${userId}/group/${groupId}`);    
+      const data: GroupChatResponse = await rawData.json();
       return {
         props: {
-          chats: data.chats ?? [],
-          userFrom: data.userFrom ?? null,
-          userTo: data.userTo ?? null,        
+          chats: data.messages,       
         }
       }      
     } catch (error) {
@@ -137,4 +143,4 @@ export async function getServerSideProps({params}: GetServerSidePropsContext) {
   }
 }
 
-export default Personal;
+export default Room;
